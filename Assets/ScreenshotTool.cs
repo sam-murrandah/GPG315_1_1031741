@@ -1,8 +1,16 @@
+/*
+ Made by Samuel Murrandah
+Student Number: 1031741
+Student Email: 1031741@student.sae.edu.au
+Class Code: GPG315
+Assignment: 1
+*/
+
 using UnityEditor;
 using UnityEngine;
 using System.IO;
-using System.Diagnostics;
-using System.Threading.Tasks;
+using System.Diagnostics; //This is for the actual saving of the image
+using System.Threading.Tasks; // This is pretty much only for the countdown
 
 public class ScreenshotTool : EditorWindow
 {
@@ -25,7 +33,7 @@ public class ScreenshotTool : EditorWindow
         window.minSize = new Vector2(400, 300); // Set minimum window size
     }
 
-    // Foldout toggles for save, capture, and advanced settings
+    // Toggles for save, capture, and advanced settings
     bool showSaveSettings = true;   // Open by default
     bool showCaptureSettings = true; // Open by default
     bool showAdvancedSettings = false; // Closed by default
@@ -91,7 +99,7 @@ public class ScreenshotTool : EditorWindow
             }
 
             GUILayout.Label(new GUIContent("Preview", "Preview the dimensions of the screenshot"), EditorStyles.boldLabel);
-            DisplayPreview(); // Show screenshot dimensions
+            DisplayPreview(); // Show screenshot dimensions (Basically resolution)
 
             GUILayout.Space(10);
             EditorGUI.indentLevel--;
@@ -142,7 +150,7 @@ public class ScreenshotTool : EditorWindow
             GUILayout.Label(new GUIContent("Preview", "Preview the dimensions of the screenshot"), EditorStyles.boldLabel);
             DisplayPreview(); // Show screenshot dimensions
 
-            DrawHorizontalLine(); // Draw separator
+            DrawHorizontalLine();
 
             GUILayout.Space(10);
             EditorGUI.indentLevel--;
@@ -157,18 +165,18 @@ public class ScreenshotTool : EditorWindow
     {
         GUILayout.BeginHorizontal();
 
-        GUILayout.Label(new GUIContent("Save Location", "Path where screenshots will be saved"), GUILayout.Width(100));
-        EditorGUILayout.SelectableLabel(folderPath, EditorStyles.textField, GUILayout.Height(18));
+            GUILayout.Label(new GUIContent("Save Location", "Path where screenshots will be saved"), GUILayout.Width(100));
+            EditorGUILayout.SelectableLabel(folderPath, EditorStyles.textField, GUILayout.Height(18));
 
-        if (GUILayout.Button(new GUIContent("Choose", "Select a folder to save screenshots"), GUILayout.Width(60)))
-        {
-            ChooseSaveLocation();
-        }
+            if (GUILayout.Button(new GUIContent("Choose", "Select a folder to save screenshots"), GUILayout.Width(60)))
+            {
+                ChooseSaveLocation();
+            }
 
-        if (GUILayout.Button(new GUIContent("Open", "Open the folder where screenshots are saved"), GUILayout.Width(60)))
-        {
-            OpenSaveLocation();
-        }
+            if (GUILayout.Button(new GUIContent("Open", "Open the folder where screenshots are saved"), GUILayout.Width(60)))
+            {
+                OpenSaveLocation();
+            }
 
         GUILayout.EndHorizontal();
     }
@@ -262,7 +270,7 @@ public class ScreenshotTool : EditorWindow
         SaveScreenshot(renderTexture, fullPath); // Save the screenshot
         CleanupAfterCapture(sceneView, renderTexture); // Clean up resources
 
-        ShowNotification(new GUIContent($"Screenshot saved: {fullPath}"));
+        this.ShowNotification(new GUIContent("Screenshot saved!"));
         UnityEngine.Debug.Log($"Screenshot saved: {fullPath}");
         AssetDatabase.Refresh(); // Refresh AssetDatabase to reflect changes
     }
@@ -302,7 +310,7 @@ public class ScreenshotTool : EditorWindow
     }
 
     /// <summary>
-    /// Captures the Scene View to a RenderTexture.
+    /// Captures the Scene View to a RenderTexture. (Basically screenshotting)
     /// </summary>
     RenderTexture CaptureScene(SceneView sceneView, int width, int height)
     {
@@ -336,9 +344,10 @@ public class ScreenshotTool : EditorWindow
     /// </summary>
     void ApplyWatermark(Texture2D screenshot)
     {
-        // Define the max percentage of the screenshot the watermark can take
-        float maxWatermarkWidthPercentage = 0.2f; // 20% of the screenshot's width
-        float maxWatermarkHeightPercentage = 0.2f; // 20% of the screenshot's height
+        //This is techy and I hate it.
+        // Define the max percentage of the screenshot the watermark can take (this stops lower resolutions from being completely overtaken by a watermark)
+        float maxWatermarkWidthPercentage = 0.5f; // % of the screenshot's width
+        float maxWatermarkHeightPercentage = 0.5f; // % of the screenshot's height
 
         // Calculate the max width and height for the watermark
         int maxWidth = Mathf.FloorToInt(screenshot.width * maxWatermarkWidthPercentage);
@@ -384,7 +393,7 @@ public class ScreenshotTool : EditorWindow
 
 
     /// <summary>
-    /// Cleans up resources after capturing.
+    /// Cleans up resources after capturing. (Good for memory leaks and just overall cleanliness)
     /// </summary>
     void CleanupAfterCapture(SceneView sceneView, RenderTexture renderTexture)
     {

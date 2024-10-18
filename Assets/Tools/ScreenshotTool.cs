@@ -366,7 +366,7 @@ public class ScreenshotTool : EditorWindow
                 break;
 
             case PostProcessingEffect.Posterize:
-                ApplyPosterize(screenshot, 10); // Posterize with x levels
+                ApplyPosterize(screenshot, 15); // Posterize with x levels
                 break;
 
             case PostProcessingEffect.Inverted:

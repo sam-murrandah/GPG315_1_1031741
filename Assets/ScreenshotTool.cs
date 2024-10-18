@@ -336,15 +336,39 @@ public class ScreenshotTool : EditorWindow
     /// </summary>
     void ApplyWatermark(Texture2D screenshot)
     {
-        int x = screenshot.width - watermark.width;
-        int y = 0;
+        // Define the max percentage of the screenshot the watermark can take
+        float maxWatermarkWidthPercentage = 0.2f; // 20% of the screenshot's width
+        float maxWatermarkHeightPercentage = 0.2f; // 20% of the screenshot's height
 
-        for (int i = 0; i < watermark.width; i++)
+        // Calculate the max width and height for the watermark
+        int maxWidth = Mathf.FloorToInt(screenshot.width * maxWatermarkWidthPercentage);
+        int maxHeight = Mathf.FloorToInt(screenshot.height * maxWatermarkHeightPercentage);
+
+        // Calculate scaling factors for the watermark
+        float widthScale = Mathf.Min(1, maxWidth / (float)watermark.width);
+        float heightScale = Mathf.Min(1, maxHeight / (float)watermark.height);
+        float scale = Mathf.Min(widthScale, heightScale); // Use the smaller scale to maintain aspect ratio
+
+        // Calculate the final size of the watermark
+        int finalWidth = Mathf.FloorToInt(watermark.width * scale);
+        int finalHeight = Mathf.FloorToInt(watermark.height * scale);
+
+        // Determine the position to place the watermark (bottom-right corner)
+        int x = screenshot.width - finalWidth;
+        int y = 0; // You can adjust this if you want it vertically centered or positioned differently
+
+        // Loop through the scaled watermark and apply it to the screenshot
+        for (int i = 0; i < finalWidth; i++)
         {
-            for (int j = 0; j < watermark.height; j++)
+            for (int j = 0; j < finalHeight; j++)
             {
-                Color watermarkPixel = watermark.GetPixel(i, j);
-                watermarkPixel.a *= 0.5f; // Reduce opacity to 50%
+                // Calculate the corresponding pixel from the original watermark
+                int watermarkX = Mathf.FloorToInt(i / scale);
+                int watermarkY = Mathf.FloorToInt(j / scale);
+
+                // Get the watermark pixel and adjust opacity
+                Color watermarkPixel = watermark.GetPixel(watermarkX, watermarkY);
+                watermarkPixel.a *= 0.5f; // Reduce opacity
 
                 if (watermarkPixel.a > 0)
                 {
@@ -354,8 +378,10 @@ public class ScreenshotTool : EditorWindow
                 }
             }
         }
-        screenshot.Apply();
+
+        screenshot.Apply(); // Apply the changes to the screenshot
     }
+
 
     /// <summary>
     /// Cleans up resources after capturing.

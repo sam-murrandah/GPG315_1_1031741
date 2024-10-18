@@ -29,7 +29,7 @@ public class ScreenshotTool : EditorWindow
     bool shiftyMode = false; // Shifty Mode toggle
     float vignetteIntensity = 0f; // Default vignette intensity
     float noiseAmount = 0f;
-    public enum PostProcessingEffect { None, Grayscale, Sepia, Posterize }
+    public enum PostProcessingEffect { None, Grayscale, Sepia, Posterize, Inverted }
     PostProcessingEffect selectedEffect = PostProcessingEffect.None;
 
     // Menu item to open the tool window
@@ -366,7 +366,11 @@ public class ScreenshotTool : EditorWindow
                 break;
 
             case PostProcessingEffect.Posterize:
-                ApplyPosterize(screenshot, 4); // Posterize with 4 levels
+                ApplyPosterize(screenshot, 10); // Posterize with x levels
+                break;
+
+            case PostProcessingEffect.Inverted:
+                ApplyInvertColors(screenshot);
                 break;
         }
 
@@ -400,7 +404,7 @@ public class ScreenshotTool : EditorWindow
         texture.SetPixels(pixels);
     }
 
-    // Posterize effect: Reduces the color levels to create a stylized look
+    // Posterize effect: Reduces the colour levels to create a stylized look
     void ApplyPosterize(Texture2D texture, int levels)
     {
         Color[] pixels = texture.GetPixels();
@@ -412,7 +416,23 @@ public class ScreenshotTool : EditorWindow
         }
         texture.SetPixels(pixels);
     }
-   
+
+    //Invert Colors effect: Inverts all colours in the image
+    void ApplyInvertColors(Texture2D texture)
+    {
+        Color[] pixels = texture.GetPixels();
+
+        for (int i = 0; i < pixels.Length; i++)
+        {
+            pixels[i].r = 1.0f - pixels[i].r; // Invert red channel
+            pixels[i].g = 1.0f - pixels[i].g; // Invert green channel
+            pixels[i].b = 1.0f - pixels[i].b; // Invert blue channel
+        }
+
+        texture.SetPixels(pixels);
+        texture.Apply(); // Apply changes to the texture
+    }
+
     /// <summary>
     /// Adds a random noise value to all the pixels in the image
     /// </summary>

@@ -15,7 +15,7 @@ using System.Threading.Tasks; // This is pretty much only for the countdown
 public class ScreenshotTool : EditorWindow
 {
     // Basic settings variables
-    string folderPath = "Screenshots/"; // Default save location
+    string folderPath = Path.Combine(Application.dataPath, "Screenshots"); // Default save location
     string[] formats = { "PNG", "JPEG", "EXR" }; // Supported image formats
     int selectedFormat = 0; // Default format (PNG)
     int resolutionMultiplier = 1; // Multiplier for screenshot resolution
@@ -24,6 +24,7 @@ public class ScreenshotTool : EditorWindow
     // Advanced settings variables
     int captureDelay = 0; // Delay before capturing (in seconds)
     Texture2D watermark; // Optional watermark image
+    bool shiftyMode = false; // Shifty Mode toggle
 
     // Menu item to open the tool window
     [MenuItem("Tools/Quick Screenshot Tool")]
@@ -78,32 +79,7 @@ public class ScreenshotTool : EditorWindow
         GUILayout.Space(10);
         DrawHorizontalLine(); // Draw separator
 
-        // Advanced Settings Foldout (Closed by default)
-        showAdvancedSettings = EditorGUILayout.Foldout(showAdvancedSettings, new GUIContent("Advanced Settings", "Optional advanced settings"));
-        if (showAdvancedSettings)
-        {
-            EditorGUI.indentLevel++;
-            captureDelay = EditorGUILayout.IntSlider(
-                new GUIContent("Capture Delay (s)", "Delay before the screenshot is taken (in seconds)"),
-                captureDelay, 0, 10
-            );
-
-            watermark = (Texture2D)EditorGUILayout.ObjectField(
-                new GUIContent("Watermark", "Optional watermark to overlay on the screenshot"),
-                watermark, typeof(Texture2D), false
-            );
-
-            if (watermark != null && !watermark.isReadable)
-            {
-                EditorGUILayout.HelpBox("The selected watermark texture is not readable. Enable 'Read/Write' in the texture import settings.", MessageType.Warning);
-            }
-
-            GUILayout.Label(new GUIContent("Preview", "Preview the dimensions of the screenshot"), EditorStyles.boldLabel);
-            DisplayPreview(); // Show screenshot dimensions (Basically resolution)
-
-            GUILayout.Space(10);
-            EditorGUI.indentLevel--;
-        }
+        DrawAdvancedSettings();
 
         GUILayout.Space(10);
 
@@ -125,36 +101,40 @@ public class ScreenshotTool : EditorWindow
     /// </summary>
     void DrawAdvancedSettings()
     {
-        showAdvancedSettings = EditorGUILayout.Foldout(showAdvancedSettings, new GUIContent("Advanced Settings", "Optional advanced settings"));
+        // Advanced Settings Foldout
+        showAdvancedSettings = EditorGUILayout.Foldout(
+            showAdvancedSettings,
+            new GUIContent("Advanced Settings", "Optional advanced settings")
+        );
 
         if (showAdvancedSettings)
         {
-            EditorGUI.indentLevel++;
+            EditorGUI.indentLevel++; // Indent for better visual structure
 
+            // Capture Delay Slider
             captureDelay = EditorGUILayout.IntSlider(
                 new GUIContent("Capture Delay (s)", "Delay before the screenshot is taken (in seconds)"),
                 captureDelay, 0, 10
             );
-
+            // Shifty Mode Checkbox
+            shiftyMode = EditorGUILayout.Toggle(
+                new GUIContent("Radiation Mode", "Bit of a joke setting, makes it look like you're staring at a bar of Plutonium"),
+                shiftyMode
+            );
+            // Watermark Field
             watermark = (Texture2D)EditorGUILayout.ObjectField(
                 new GUIContent("Watermark", "Optional watermark to overlay on the screenshot"),
                 watermark, typeof(Texture2D), false
             );
 
-            if (watermark != null && !watermark.isReadable)
-            {
-                EditorGUILayout.HelpBox("The selected watermark texture is not readable. Enable 'Read/Write' in the texture import settings.", MessageType.Warning);
-            }
-
-
+            
             GUILayout.Label(new GUIContent("Preview", "Preview the dimensions of the screenshot"), EditorStyles.boldLabel);
-            DisplayPreview(); // Show screenshot dimensions
-
-            DrawHorizontalLine();
+            DisplayPreview(); // Show screenshot dimensions (Basically resolution)
 
             GUILayout.Space(10);
             EditorGUI.indentLevel--;
         }
+
     }
 
 
@@ -332,12 +312,15 @@ public class ScreenshotTool : EditorWindow
 
         if (watermark != null) ApplyWatermark(screenshot);
 
+        if (shiftyMode) ApplyShiftyModeAcrossRows(screenshot); // Apply shifty effect
+
         byte[] bytes = selectedFormat == 0 ? screenshot.EncodeToPNG() :
                        selectedFormat == 1 ? screenshot.EncodeToJPG() :
                        screenshot.EncodeToEXR();
 
         File.WriteAllBytes(fullPath, bytes);
     }
+
 
     /// <summary>
     /// Applies a watermark to the screenshot.
@@ -389,6 +372,63 @@ public class ScreenshotTool : EditorWindow
         }
 
         screenshot.Apply(); // Apply the changes to the screenshot
+    }
+
+    void ApplyShiftyModeAcrossRows(Texture2D screenshot)
+    {
+        int width = screenshot.width;
+        int height = screenshot.height;
+
+        // Get the original pixels
+        Color[] originalPixels = screenshot.GetPixels();
+        Color[] glitchPixels = new Color[originalPixels.Length];
+
+        // Initialize glitchPixels with the original pixels (avoids black gaps)
+        for (int i = 0; i < originalPixels.Length; i++)
+        {
+            glitchPixels[i] = originalPixels[i];
+        }
+
+        // Randomly shift pixels and corrupt colors
+        for (int y = 0; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                // Calculate the original pixel index
+                int originalIndex = y * width + x;
+
+                // Generate a random offset (can wrap around the edges)
+                int offsetX = (x + Random.Range(-30, 30) + width) % width;
+                int offsetY = (y + Random.Range(-30, 30) + height) % height;
+                int newIndex = offsetY * width + offsetX;
+
+                // Randomly corrupt the color channels
+                Color corruptedColor = originalPixels[originalIndex];
+                if (Random.value > 0.9f) // % chance of color corruption
+                {
+                    corruptedColor.r = Random.value; // Random red value
+                    corruptedColor.g = Random.value; // Random green value
+                    corruptedColor.b = Random.value; // Random blue value
+                }
+                else if (Random.value > 0.9f) // % chance of black
+                {
+                    corruptedColor.r = 0.2f; // Random red value
+                    corruptedColor.g = 0.2f; // Random green value
+                    corruptedColor.b = 0.2f; // Random blue value
+                }
+                else
+                {
+                    corruptedColor.g += 0.1f; // Random green value
+                }
+
+                // Assign the corrupted color to the new position
+                glitchPixels[newIndex] = corruptedColor;
+            }
+        }
+
+        // Apply the glitchy pixels back to the texture
+        screenshot.SetPixels(glitchPixels);
+        screenshot.Apply(); // Apply the changes
     }
 
 

@@ -44,6 +44,7 @@ public class ScreenshotTool : EditorWindow
     bool showSaveSettings = true;   // Open by default
     bool showCaptureSettings = true; // Open by default
     bool showAdvancedSettings = false; // Closed by default
+    bool showPostProcSettings = false; // Closed by default
 
     void OnGUI()
     {
@@ -70,25 +71,31 @@ public class ScreenshotTool : EditorWindow
         if (showCaptureSettings)
         {
             EditorGUI.indentLevel++;
-            resolutionMultiplier = EditorGUILayout.IntSlider(
-                new GUIContent("Resolution Multiplier", "Adjusts the resolution scale of the screenshot"),
-                resolutionMultiplier, 1, 5
-            );
+                resolutionMultiplier = EditorGUILayout.IntSlider(
+                    new GUIContent("Resolution Multiplier", "Adjusts the resolution scale of the screenshot"),
+                    resolutionMultiplier, 1, 5
+                );
 
-            selectedFormat = EditorGUILayout.Popup(
-                new GUIContent("Image Format", "Select the format for saving the screenshot"),
-                selectedFormat, formats
-            );
+                selectedFormat = EditorGUILayout.Popup(
+                    new GUIContent("Image Format", "Select the format for saving the screenshot"),
+                    selectedFormat, formats
+                );
+
+
+            GUILayout.Label(new GUIContent("Preview", "Preview the dimensions of the screenshot"), EditorStyles.boldLabel);
+            DisplayPreview(); // Show screenshot dimensions (Basically resolution)
             EditorGUI.indentLevel--;
+            DrawHorizontalLine(); // Draw separator
         }
 
         GUILayout.Space(10);
-        DrawHorizontalLine(); // Draw separator
 
         DrawAdvancedSettings();
-
+        GUILayout.Space(10);
+        DrawPostProcessingSettings();
         GUILayout.Space(10);
 
+        GUILayout.Space(10);
         SceneView sceneView = SceneView.lastActiveSceneView;
         EditorGUI.BeginDisabledGroup(sceneView == null); // Disable button if no active Scene View
 
@@ -97,31 +104,6 @@ public class ScreenshotTool : EditorWindow
             TakeEditorScreenshot(); // Capture screenshot
         }
         EditorGUI.EndDisabledGroup();
-    }
-
-    void ApplyVignetteEffect(Texture2D screenshot)
-    {
-        int width = screenshot.width;
-        int height = screenshot.height;
-        Vector2 center = new Vector2(width / 2f, height / 2f);
-        float maxDistance = Vector2.Distance(Vector2.zero, center); // Max distance for vignette
-
-        Color[] pixels = screenshot.GetPixels();
-
-        for (int y = 0; y < height; y++)
-        {
-            for (int x = 0; x < width; x++)
-            {
-                int index = y * width + x;
-                float distance = Vector2.Distance(new Vector2(x, y), center) / maxDistance;
-                float vignetteFactor = Mathf.Clamp01(1.0f - vignetteIntensity * distance);
-
-                pixels[index] *= vignetteFactor; // Apply vignette by darkening the pixel
-            }
-        }
-
-        screenshot.SetPixels(pixels);
-        screenshot.Apply(); // Apply changes to the texture
     }
 
     /// <summary>
@@ -150,10 +132,25 @@ public class ScreenshotTool : EditorWindow
                 new GUIContent("Watermark", "Optional watermark to overlay on the screenshot"),
                 watermark, typeof(Texture2D), false
             );
-
+            
+            EditorGUI.indentLevel--;
             DrawHorizontalLine();
+        }
 
-            GUILayout.Label(new GUIContent("Post Processing", "Change various post processing effects"), EditorStyles.boldLabel);
+    }
+
+    void DrawPostProcessingSettings()
+    {
+        // Advanced Settings Foldout
+        showPostProcSettings = EditorGUILayout.Foldout(
+            showPostProcSettings,
+            new GUIContent("Post Processing Settings", "Optional post processing settings")
+        );
+
+
+        if ( showPostProcSettings)
+        {
+            EditorGUI.indentLevel++;
 
             // Vignette Slider
             vignetteIntensity = EditorGUILayout.Slider(
@@ -178,18 +175,14 @@ public class ScreenshotTool : EditorWindow
                 new GUIContent("Radiation Mode", "Bit of a joke setting, makes it look like you're staring at a bar of Plutonium"),
                 shiftyMode
             );
-            
-
-            
-            GUILayout.Label(new GUIContent("Preview", "Preview the dimensions of the screenshot"), EditorStyles.boldLabel);
-            DisplayPreview(); // Show screenshot dimensions (Basically resolution)
 
             GUILayout.Space(10);
             EditorGUI.indentLevel--;
+            DrawHorizontalLine();
         }
 
     }
-
+    
     /// <summary>
     /// Displays save location controls (path, choose, open).
     /// </summary>
@@ -233,7 +226,7 @@ public class ScreenshotTool : EditorWindow
         if (sceneView != null)
         {
             var (width, height) = GetScreenshotDimensions(sceneView);
-            GUILayout.Label($"Preview: {width} x {height} pixels");
+            GUILayout.Label($"Preview Size: {width} x {height} pixels");
         }
     }
 
@@ -451,7 +444,30 @@ public class ScreenshotTool : EditorWindow
         texture.SetPixels(pixels);
         texture.Apply(); // Apply changes to the texture
     }
+    void ApplyVignetteEffect(Texture2D screenshot)
+    {
+        int width = screenshot.width;
+        int height = screenshot.height;
+        Vector2 center = new Vector2(width / 2f, height / 2f);
+        float maxDistance = Vector2.Distance(Vector2.zero, center); // Max distance for vignette
 
+        Color[] pixels = screenshot.GetPixels();
+
+        for (int y = 0; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                int index = y * width + x;
+                float distance = Vector2.Distance(new Vector2(x, y), center) / maxDistance;
+                float vignetteFactor = Mathf.Clamp01(1.0f - vignetteIntensity * distance);
+
+                pixels[index] *= vignetteFactor; // Apply vignette by darkening the pixel
+            }
+        }
+
+        screenshot.SetPixels(pixels);
+        screenshot.Apply(); // Apply changes to the texture
+    }
     /// <summary>
     /// Saves the captured screenshot to the specified path.
     /// </summary>

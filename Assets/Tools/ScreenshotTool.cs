@@ -24,6 +24,10 @@ public class ScreenshotTool : EditorWindow
     // Advanced settings variables
     int captureDelay = 0; // Delay before capturing (in seconds)
     Texture2D watermark; // Optional watermark image
+    
+    //Live window variables
+    RenderTexture previewTexture; // Texture for the live preview
+    int previewSize = 256; // Size of the preview (width/height)
 
     //Post processing variables
     bool shiftyMode = false; // Shifty Mode toggle
@@ -46,65 +50,116 @@ public class ScreenshotTool : EditorWindow
     bool showAdvancedSettings = false; // Closed by default
     bool showPostProcSettings = false; // Closed by default
 
+    Vector2 scrollPosition = Vector2.zero;
     void OnGUI()
     {
-        GUILayout.Label(new GUIContent("Quick Screenshot Tool", "A tool for taking screenshots of the Scene View"), EditorStyles.boldLabel);
+        // Begin the scroll view
+        scrollPosition = EditorGUILayout.BeginScrollView(
+            scrollPosition,
+            GUILayout.Width(position.width),
+            GUILayout.Height(position.height)
+        );
+
+        // Header
+        GUILayout.Label(
+            new GUIContent("Quick Screenshot Tool", "A tool for taking screenshots of the Scene View"),
+            EditorStyles.boldLabel
+        );
 
         GUILayout.Space(10);
         DrawHorizontalLine(); // Draw separator
 
-        // Save Settings Foldout (Open by default)
-        showSaveSettings = EditorGUILayout.Foldout(showSaveSettings, new GUIContent("Save Settings", "Settings for saving screenshots"));
+        // Save Settings
+        showSaveSettings = EditorGUILayout.Foldout(
+            showSaveSettings,
+            new GUIContent("Save Settings", "Settings for saving screenshots")
+        );
+
         if (showSaveSettings)
         {
             EditorGUI.indentLevel++;
             DisplaySaveLocationControls(); // Show save path and controls
-            DisplayFileTagSetting(); // Input for file tag
+            DisplayFileTagSetting();       // Input for file tag
             EditorGUI.indentLevel--;
         }
 
         GUILayout.Space(10);
         DrawHorizontalLine(); // Draw separator
 
-        // Capture Settings Foldout (Open by default)
-        showCaptureSettings = EditorGUILayout.Foldout(showCaptureSettings, new GUIContent("Capture Settings", "Settings for capturing the screenshot"));
+        // Capture Settings
+        showCaptureSettings = EditorGUILayout.Foldout(
+            showCaptureSettings,
+            new GUIContent("Capture Settings", "Settings for capturing the screenshot")
+        );
+
         if (showCaptureSettings)
         {
             EditorGUI.indentLevel++;
-                resolutionMultiplier = EditorGUILayout.IntSlider(
-                    new GUIContent("Resolution Multiplier", "Adjusts the resolution scale of the screenshot"),
-                    resolutionMultiplier, 1, 5
-                );
 
-                selectedFormat = EditorGUILayout.Popup(
-                    new GUIContent("Image Format", "Select the format for saving the screenshot"),
-                    selectedFormat, formats
-                );
+            resolutionMultiplier = EditorGUILayout.IntSlider(
+                new GUIContent("Resolution Multiplier", "Adjusts the resolution scale of the screenshot"),
+                resolutionMultiplier,
+                1,
+                5
+            );
 
+            selectedFormat = EditorGUILayout.Popup(
+                new GUIContent("Image Format", "Select the format for saving the screenshot"),
+                selectedFormat,
+                formats
+            );
 
-            GUILayout.Label(new GUIContent("Preview", "Preview the dimensions of the screenshot"), EditorStyles.boldLabel);
+            GUILayout.Label(
+                new GUIContent("Preview", "Preview the dimensions of the screenshot"),
+                EditorStyles.boldLabel
+            );
+
             DisplayPreview(); // Show screenshot dimensions (Basically resolution)
+
             EditorGUI.indentLevel--;
             DrawHorizontalLine(); // Draw separator
         }
 
         GUILayout.Space(10);
 
+        // Advanced Settings
         DrawAdvancedSettings();
+
         GUILayout.Space(10);
+
+        // Post-Processing Settings
         DrawPostProcessingSettings();
-        GUILayout.Space(10);
 
         GUILayout.Space(10);
+
+        // Take Screenshot Button
         SceneView sceneView = SceneView.lastActiveSceneView;
-        EditorGUI.BeginDisabledGroup(sceneView == null); // Disable button if no active Scene View
 
-        if (GUILayout.Button(new GUIContent("Take Screenshot of Scene View", "Capture a screenshot of the active Scene View")))
+        EditorGUI.BeginDisabledGroup(sceneView == null); // Disable button if no active Scene View
+        if (GUILayout.Button(
+            new GUIContent("Take Screenshot of Scene View", "Capture a screenshot of the active Scene View")
+        ))
         {
             TakeEditorScreenshot(); // Capture screenshot
         }
         EditorGUI.EndDisabledGroup();
+
+        GUILayout.Space(10);
+
+        // Live Preview
+        GUILayout.Label(
+            new GUIContent("Live Preview", "Preview of the post-processed screenshot"),
+            EditorStyles.boldLabel
+        );
+
+        DisplayLivePreview(); // Display the live preview
+
+        GUILayout.Space(10);
+
+        // End the scroll view
+        EditorGUILayout.EndScrollView();
     }
+
 
     /// <summary>
     /// Draws the advanced settings foldout section.
@@ -342,10 +397,72 @@ public class ScreenshotTool : EditorWindow
         sceneView.camera.Render();
         return renderTexture;
     }
-   
+
+    void DisplayLivePreview()
+    {
+        SceneView sceneView = SceneView.lastActiveSceneView;
+        if (sceneView == null || sceneView.camera == null)
+        {
+            GUILayout.Label("No active Scene View available.");
+            return;
+        }
+
+        // Get the dimensions of the Scene View
+        var (sceneWidth, sceneHeight) = GetScreenshotDimensions(sceneView);
+
+        // Calculate the aspect ratio
+        float aspectRatio = (float)sceneWidth / sceneHeight;
+
+        // Get the available width and height in the editor window
+        float availableWidth = position.width - 20;  // Subtracting some padding
+        float availableHeight = position.height - 100; // Accounting for layout elements
+
+        // Adjust the preview size to fit within available space while maintaining aspect ratio
+        float previewWidth, previewHeight;
+
+        if (availableWidth / aspectRatio <= availableHeight)
+        {
+            previewWidth = availableWidth;
+            previewHeight = availableWidth / aspectRatio;
+        }
+        else
+        {
+            previewHeight = availableHeight;
+            previewWidth = availableHeight * aspectRatio;
+        }
+
+        // Create or reuse the preview RenderTexture
+        if (previewTexture == null || previewTexture.width != (int)previewWidth || previewTexture.height != (int)previewHeight)
+        {
+            if (previewTexture != null) previewTexture.Release(); // Release previous texture
+            previewTexture = new RenderTexture((int)previewWidth, (int)previewHeight, 24);
+        }
+
+        // Set the camera to render to the preview texture
+        sceneView.camera.targetTexture = previewTexture;
+        sceneView.camera.Render();
+        sceneView.camera.targetTexture = null;
+
+        // Read the RenderTexture into a Texture2D
+        RenderTexture.active = previewTexture;
+        Texture2D tempTexture = new Texture2D((int)previewWidth, (int)previewHeight, TextureFormat.RGB24, false);
+        tempTexture.ReadPixels(new Rect(0, 0, previewWidth, previewHeight), 0, 0);
+        tempTexture.Apply();
+        RenderTexture.active = null; // Unbind the RenderTexture
+
+        AddAllEffects(tempTexture);
+
+        // Display the preview texture in the editor window
+        GUILayout.Label(new GUIContent(tempTexture), GUILayout.Width(previewWidth), GUILayout.Height(previewHeight));
+
+        // Clean up the temporary texture
+        DestroyImmediate(tempTexture);
+    }
+
+
     /// <summary>
-   /// Applies a post processing preset effect
-   /// </summary>
+    /// Applies a post processing preset effect
+    /// </summary>
     void ApplyPostProcessingEffect(Texture2D screenshot)
     {
         switch (selectedEffect)
@@ -478,6 +595,16 @@ public class ScreenshotTool : EditorWindow
         screenshot.ReadPixels(new Rect(0, 0, renderTexture.width, renderTexture.height), 0, 0);
         screenshot.Apply();
 
+        AddAllEffects(screenshot);
+        byte[] bytes = selectedFormat == 0 ? screenshot.EncodeToPNG() :
+                       selectedFormat == 1 ? screenshot.EncodeToJPG() :
+                       screenshot.EncodeToEXR();
+
+        File.WriteAllBytes(fullPath, bytes);
+    }
+
+    void AddAllEffects(Texture2D screenshot)
+    {
         ApplyPostProcessingEffect(screenshot); // New Post-Processing
         if (shiftyMode) ApplyShiftyModeAcrossRows(screenshot); // Apply shifty effect
         if (noiseAmount > 0) ApplyNoise(screenshot, noiseAmount); // Noise effect
@@ -485,12 +612,7 @@ public class ScreenshotTool : EditorWindow
         ApplyVignetteEffect(screenshot); // Apply vignette effect
 
         if (watermark != null) ApplyWatermark(screenshot);
-        byte[] bytes = selectedFormat == 0 ? screenshot.EncodeToPNG() :
-                       selectedFormat == 1 ? screenshot.EncodeToJPG() :
-                       screenshot.EncodeToEXR();
-
-        File.WriteAllBytes(fullPath, bytes);
-    }
+    } 
 
     /// <summary>
     /// Applies a watermark to the screenshot.

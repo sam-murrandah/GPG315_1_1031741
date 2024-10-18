@@ -1,72 +1,109 @@
 using UnityEditor;
 using UnityEngine;
 using System.IO;
-using System.Diagnostics; // For opening the file explorer
+using System.Diagnostics;
+using System.Threading.Tasks;
 
 public class ScreenshotTool : EditorWindow
 {
     string folderPath = "Screenshots/"; // Default save location
     string[] formats = { "PNG", "JPEG", "EXR" }; // Supported image formats
     int selectedFormat = 0; // Default to PNG
-    int resolutionMultiplier = 1; // Resolution multiplier for the screenshot
+    int resolutionMultiplier = 1; // Resolution multiplier
+    string fileTag = "Screenshot"; // Custom tag for file naming
+
+    // Advanced settings variables
+    bool showAdvancedSettings = false; // Toggle for advanced settings
+    int captureDelay = 0; // Delay before capturing (seconds)
+    Texture2D watermark; // Watermark image
 
     [MenuItem("Tools/Quick Screenshot Tool")]
     public static void ShowWindow()
     {
-        GetWindow<ScreenshotTool>("Screenshot Tool");
+        var window = GetWindow<ScreenshotTool>("Screenshot Tool");
+        window.minSize = new Vector2(400, 300); // Set minimum size
     }
 
     void OnGUI()
     {
-        SceneView sceneView = SceneView.lastActiveSceneView;
-
         GUILayout.Label("Quick Screenshot Tool", EditorStyles.boldLabel);
 
         GUILayout.Space(10);
+        DrawHorizontalLine();
 
         GUILayout.Label("Save Settings", EditorStyles.boldLabel);
         DisplaySaveLocationControls();
+        DisplayFileTagSetting();
 
-        GUILayout.Space(5);
+        GUILayout.Space(10);
+        DrawHorizontalLine();
 
         GUILayout.Label("Capture Settings", EditorStyles.boldLabel);
         resolutionMultiplier = EditorGUILayout.IntSlider("Resolution Multiplier", resolutionMultiplier, 1, 5);
         selectedFormat = EditorGUILayout.Popup("Image Format", selectedFormat, formats);
 
-        GUILayout.Space(5);
+        GUILayout.Space(10);
+        DrawAdvancedSettings(); // Advanced settings dropdown
 
+        GUILayout.Space(10);
         DrawHorizontalLine();
+
+        GUILayout.Label("Preview", EditorStyles.boldLabel);
         DisplayPreview();
-        EditorGUI.BeginDisabledGroup(sceneView == null); // Disable button if no active Scene View
+
+        GUILayout.Space(10);
+        SceneView sceneView = SceneView.lastActiveSceneView;
+
+        EditorGUI.BeginDisabledGroup(sceneView == null);
         if (GUILayout.Button("Take Screenshot of Scene View"))
         {
             TakeEditorScreenshot();
         }
         EditorGUI.EndDisabledGroup();
     }
-    void DrawHorizontalLine()
+
+    /// <summary>
+    /// Displays the advanced settings in a foldout section.
+    /// </summary>
+    void DrawAdvancedSettings()
     {
-        GUILayout.Box("", GUILayout.ExpandWidth(true), GUILayout.Height(2));
+        showAdvancedSettings = EditorGUILayout.Foldout(showAdvancedSettings, "Advanced Settings");
+        if (showAdvancedSettings)
+        {
+            EditorGUI.indentLevel++; // Indent for better structure
+            captureDelay = EditorGUILayout.IntSlider("Capture Delay (s)", captureDelay, 0, 10);
+            watermark = (Texture2D)EditorGUILayout.ObjectField("Watermark", watermark, typeof(Texture2D), false);
+
+            if (watermark != null && !watermark.isReadable)
+            {
+                EditorGUILayout.HelpBox("The selected watermark texture is not readable. Enable 'Read/Write' in the texture import settings.", MessageType.Warning);
+            }
+            EditorGUI.indentLevel--;
+        }
     }
 
     void DisplaySaveLocationControls()
-{
+    {
         GUILayout.BeginHorizontal();
-            GUILayout.Label($"Save Location"); // Non-editable label
-            EditorGUILayout.SelectableLabel(folderPath, EditorStyles.textField, GUILayout.Height(18)); // Read-only, selectable
+        GUILayout.Label("Save Location", GUILayout.Width(100));
+        EditorGUILayout.SelectableLabel(folderPath, EditorStyles.textField, GUILayout.Height(18));
 
-            if (GUILayout.Button("Choose", GUILayout.Width(60)))
-            {
-                ChooseSaveLocation();
-            }
+        if (GUILayout.Button("Choose", GUILayout.Width(60)))
+        {
+            ChooseSaveLocation();
+        }
 
-            if (GUILayout.Button("Open", GUILayout.Width(60)))
-            {
-                OpenSaveLocation();
-            }
+        if (GUILayout.Button("Open", GUILayout.Width(60)))
+        {
+            OpenSaveLocation();
+        }
         GUILayout.EndHorizontal();
     }
 
+    void DisplayFileTagSetting()
+    {
+        fileTag = EditorGUILayout.TextField("File Tag", fileTag);
+    }
 
     void DisplayPreview()
     {
@@ -78,9 +115,11 @@ public class ScreenshotTool : EditorWindow
         }
     }
 
-    /// <summary>
-    /// Opens a folder selection dialog to choose the save location.
-    /// </summary>
+    void DrawHorizontalLine()
+    {
+        GUILayout.Box("", GUILayout.ExpandWidth(true), GUILayout.Height(1));
+    }
+
     void ChooseSaveLocation()
     {
         string selectedPath = EditorUtility.OpenFolderPanel("Choose Save Folder", folderPath, "");
@@ -90,9 +129,6 @@ public class ScreenshotTool : EditorWindow
         }
     }
 
-    /// <summary>
-    /// Opens the folder where screenshots are saved.
-    /// </summary>
     void OpenSaveLocation()
     {
         if (Directory.Exists(folderPath))
@@ -105,20 +141,17 @@ public class ScreenshotTool : EditorWindow
         }
         else
         {
-            UnityEngine.Debug.LogWarning("Save location does not exist. Resetting to default.");
-            folderPath = "Screenshots/"; // Reset to default if path is invalid
+            UnityEngine.Debug.LogWarning("Save location does not exist.");
+            folderPath = "Screenshots/"; // Reset to default if invalid
         }
     }
 
-
-    /// <summary>
-    /// Captures an image of the current Scene View.
-    /// </summary>
-    void TakeEditorScreenshot()
+    async void TakeEditorScreenshot()
     {
+        await Task.Delay(captureDelay * 1000); // Apply capture delay
+
         string fullPath = GenerateFilePath();
-        
-        //makes the folder if it doesn't exist
+
         if (!Directory.Exists(folderPath))
         {
             Directory.CreateDirectory(folderPath);
@@ -131,30 +164,20 @@ public class ScreenshotTool : EditorWindow
         RenderTexture renderTexture = CaptureScene(sceneView, width, height);
 
         SaveScreenshot(renderTexture, fullPath);
-        
-        //Cleanup so that there isn't any memory leaks (Being overly preventitive)
-        sceneView.camera.targetTexture = null;
-        RenderTexture.active = null;
-        DestroyImmediate(renderTexture);
+        CleanupAfterCapture(sceneView, renderTexture);
 
-        this.ShowNotification(new GUIContent($"Screenshot saved"), 0.3f);
+        ShowNotification(new GUIContent($"Screenshot saved: {fullPath}"));
         UnityEngine.Debug.Log($"Screenshot saved: {fullPath}");
         AssetDatabase.Refresh();
     }
 
-    /// <summary>
-    /// Generates the full path for the screenshot file.
-    /// </summary>
     string GenerateFilePath()
     {
         string extension = formats[selectedFormat].ToLower();
-        string fileName = $"UnityScreenshot_{System.DateTime.Now:yyyyMMdd_HHmmss}.{extension}";
+        string fileName = $"{fileTag}_{System.DateTime.Now:yyyyMMdd_HHmmss}.{extension}";
         return Path.Combine(folderPath, fileName);
     }
 
-    /// <summary>
-    /// Retrieves the currently active Scene View.
-    /// </summary>
     SceneView GetActiveSceneView()
     {
         SceneView sceneView = SceneView.lastActiveSceneView;
@@ -165,9 +188,6 @@ public class ScreenshotTool : EditorWindow
         return sceneView;
     }
 
-    /// <summary>
-    /// Calculates the dimensions for the screenshot based on the Scene View.
-    /// </summary>
     (int width, int height) GetScreenshotDimensions(SceneView sceneView)
     {
         Rect sceneViewRect = sceneView.position;
@@ -176,9 +196,6 @@ public class ScreenshotTool : EditorWindow
         return (width, height);
     }
 
-    /// <summary>
-    /// Captures the Scene View into a RenderTexture.
-    /// </summary>
     RenderTexture CaptureScene(SceneView sceneView, int width, int height)
     {
         RenderTexture renderTexture = new RenderTexture(width, height, 24);
@@ -187,9 +204,6 @@ public class ScreenshotTool : EditorWindow
         return renderTexture;
     }
 
-    /// <summary>
-    /// Saves the captured screenshot to the specified file path.
-    /// </summary>
     void SaveScreenshot(RenderTexture renderTexture, string fullPath)
     {
         RenderTexture.active = renderTexture;
@@ -197,10 +211,45 @@ public class ScreenshotTool : EditorWindow
         screenshot.ReadPixels(new Rect(0, 0, renderTexture.width, renderTexture.height), 0, 0);
         screenshot.Apply();
 
+        if (watermark != null)
+        {
+            ApplyWatermark(screenshot);
+        }
+
         byte[] bytes = selectedFormat == 0 ? screenshot.EncodeToPNG() :
                        selectedFormat == 1 ? screenshot.EncodeToJPG() :
                        screenshot.EncodeToEXR();
 
         File.WriteAllBytes(fullPath, bytes);
+    }
+
+    void ApplyWatermark(Texture2D screenshot)
+    {
+        int x = screenshot.width - watermark.width;
+        int y = 0;
+
+        for (int i = 0; i < watermark.width; i++)
+        {
+            for (int j = 0; j < watermark.height; j++)
+            {
+                Color watermarkPixel = watermark.GetPixel(i, j);
+                watermarkPixel.a *= 0.5f; // Reduce opacity to 50%
+
+                if (watermarkPixel.a > 0)
+                {
+                    Color screenshotPixel = screenshot.GetPixel(x + i, y + j);
+                    Color blendedPixel = Color.Lerp(screenshotPixel, watermarkPixel, watermarkPixel.a);
+                    screenshot.SetPixel(x + i, y + j, blendedPixel);
+                }
+            }
+        }
+        screenshot.Apply();
+    }
+
+    void CleanupAfterCapture(SceneView sceneView, RenderTexture renderTexture)
+    {
+        sceneView.camera.targetTexture = null;
+        RenderTexture.active = null;
+        DestroyImmediate(renderTexture);
     }
 }

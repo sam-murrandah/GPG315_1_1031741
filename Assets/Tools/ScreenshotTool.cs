@@ -11,237 +11,68 @@ using UnityEngine;
 using System.IO;
 using System.Diagnostics; //This is for the actual saving of the image
 using System.Threading.Tasks; // This is pretty much only for the countdown
+using static PostProcessingEffects;
 
 public class ScreenshotTool : EditorWindow
 {
-    // Basic settings variables
-    string folderPath = Path.Combine(Application.dataPath, "Screenshots"); // Default save location
-    string[] formats = { "PNG", "JPEG", "EXR" }; // Supported image formats
-    int selectedFormat = 0; // Default format (PNG)
-    int resolutionMultiplier = 1; // Multiplier for screenshot resolution
-    string fileTag = "Screenshot"; // Custom tag for file naming
+    // Basic Settings
+    public string folderPath = Path.Combine(Application.dataPath, "Screenshots");
+    public string[] formats = { "PNG", "JPEG", "EXR" };
+    public int selectedFormat = 0;
+    public int resolutionMultiplier = 1;
+    public string fileTag = "Screenshot";
+    public int captureDelay = 0;
+    public Texture2D watermark;
 
-    // Advanced settings variables
-    int captureDelay = 0; // Delay before capturing (in seconds)
-    Texture2D watermark; // Optional watermark image
-    
-    //Live window variables
-    RenderTexture previewTexture; // Texture for the live preview
-    int previewSize = 256; // Size of the preview (width/height)
+    // Post-Processing Settings
+    public bool shiftyMode = false;
+    public float vignetteIntensity = 0f;
+    public float noiseAmount = 0f;
+    public Effect selectedEffect = Effect.None;
 
-    //Post processing variables
-    bool shiftyMode = false; // Shifty Mode toggle
-    float vignetteIntensity = 0f; // Default vignette intensity
-    float noiseAmount = 0f;
-    public enum PostProcessingEffect { None, Grayscale, Sepia, Posterize, Inverted }
-    PostProcessingEffect selectedEffect = PostProcessingEffect.None;
+    // UI State
+    private RenderTexture previewTexture;
+    private Vector2 scrollPosition = Vector2.zero;
+    private bool showSaveSettings = true;
+    private bool showCaptureSettings = true;
+    private bool showAdvancedSettings = false;
+    private bool showPostProcSettings = false;
 
-    // Menu item to open the tool window
+    // UI Management
+    private ScreenshotToolUI ui;
+
+
     [MenuItem("Tools/Quick Screenshot Tool")]
     public static void ShowWindow()
     {
         var window = GetWindow<ScreenshotTool>("Screenshot Tool");
-        window.minSize = new Vector2(400, 300); // Set minimum window size
+        window.minSize = new Vector2(400, 300);
     }
 
-    // Toggles for save, capture, and advanced settings
-    bool showSaveSettings = true;   // Open by default
-    bool showCaptureSettings = true; // Open by default
-    bool showAdvancedSettings = false; // Closed by default
-    bool showPostProcSettings = false; // Closed by default
+    private void OnEnable()
+    {
+        ui = new ScreenshotToolUI(this);
+    }
 
-    Vector2 scrollPosition = Vector2.zero;
     void OnGUI()
     {
-        // Begin the scroll view
-        scrollPosition = EditorGUILayout.BeginScrollView(
-            scrollPosition,
-            GUILayout.Width(position.width),
-            GUILayout.Height(position.height)
-        );
+        scrollPosition = ui.DrawScrollView(scrollPosition, position.width, position.height);
 
-        // Header
-        GUILayout.Label(
-            new GUIContent("Quick Screenshot Tool", "A tool for taking screenshots of the Scene View"),
-            EditorStyles.boldLabel
-        );
+        ui.DrawHeader("Quick Screenshot Tool");
+        ui.DrawSaveSettings(ref showSaveSettings);
+        ui.DrawCaptureSettings(ref showCaptureSettings);
+        ui.DrawAdvancedSettings(ref showAdvancedSettings);
+        ui.DrawPostProcessingSettings(ref showPostProcSettings);
+        ui.DrawTakeScreenshotButton(SceneView.lastActiveSceneView);
+        ui.DrawLivePreview();
 
-        GUILayout.Space(10);
-        DrawHorizontalLine(); // Draw separator
-
-        // Save Settings
-        showSaveSettings = EditorGUILayout.Foldout(
-            showSaveSettings,
-            new GUIContent("Save Settings", "Settings for saving screenshots")
-        );
-
-        if (showSaveSettings)
-        {
-            EditorGUI.indentLevel++;
-            DisplaySaveLocationControls(); // Show save path and controls
-            DisplayFileTagSetting();       // Input for file tag
-            EditorGUI.indentLevel--;
-        }
-
-        GUILayout.Space(10);
-        DrawHorizontalLine(); // Draw separator
-
-        // Capture Settings
-        showCaptureSettings = EditorGUILayout.Foldout(
-            showCaptureSettings,
-            new GUIContent("Capture Settings", "Settings for capturing the screenshot")
-        );
-
-        if (showCaptureSettings)
-        {
-            EditorGUI.indentLevel++;
-
-            resolutionMultiplier = EditorGUILayout.IntSlider(
-                new GUIContent("Resolution Multiplier", "Adjusts the resolution scale of the screenshot"),
-                resolutionMultiplier,
-                1,
-                5
-            );
-
-            selectedFormat = EditorGUILayout.Popup(
-                new GUIContent("Image Format", "Select the format for saving the screenshot"),
-                selectedFormat,
-                formats
-            );
-
-            GUILayout.Label(
-                new GUIContent("Preview", "Preview the dimensions of the screenshot"),
-                EditorStyles.boldLabel
-            );
-
-            DisplayPreview(); // Show screenshot dimensions (Basically resolution)
-
-            EditorGUI.indentLevel--;
-            DrawHorizontalLine(); // Draw separator
-        }
-
-        GUILayout.Space(10);
-
-        // Advanced Settings
-        DrawAdvancedSettings();
-
-        GUILayout.Space(10);
-
-        // Post-Processing Settings
-        DrawPostProcessingSettings();
-
-        GUILayout.Space(10);
-
-        // Take Screenshot Button
-        SceneView sceneView = SceneView.lastActiveSceneView;
-
-        EditorGUI.BeginDisabledGroup(sceneView == null); // Disable button if no active Scene View
-        if (GUILayout.Button(
-            new GUIContent("Take Screenshot of Scene View", "Capture a screenshot of the active Scene View")
-        ))
-        {
-            TakeEditorScreenshot(); // Capture screenshot
-        }
-        EditorGUI.EndDisabledGroup();
-
-        GUILayout.Space(10);
-
-        // Live Preview
-        GUILayout.Label(
-            new GUIContent("Live Preview", "Preview of the post-processed screenshot"),
-            EditorStyles.boldLabel
-        );
-
-        DisplayLivePreview(); // Display the live preview
-
-        GUILayout.Space(10);
-
-        // End the scroll view
         EditorGUILayout.EndScrollView();
     }
-
-
-    /// <summary>
-    /// Draws the advanced settings foldout section.
-    /// </summary>
-    void DrawAdvancedSettings()
-    {
-        // Advanced Settings Foldout
-        showAdvancedSettings = EditorGUILayout.Foldout(
-            showAdvancedSettings,
-            new GUIContent("Advanced Settings", "Optional advanced settings")
-        );
-
-        if (showAdvancedSettings)
-        {
-            EditorGUI.indentLevel++; // Indent for better visual structure
-
-            // Capture Delay Slider
-            captureDelay = EditorGUILayout.IntSlider(
-                new GUIContent("Capture Delay (s)", "Delay before the screenshot is taken (in seconds)"),
-                captureDelay, 0, 10
-            );
-
-            // Watermark Field
-            watermark = (Texture2D)EditorGUILayout.ObjectField(
-                new GUIContent("Watermark", "Optional watermark to overlay on the screenshot"),
-                watermark, typeof(Texture2D), false
-            );
-            
-            EditorGUI.indentLevel--;
-            DrawHorizontalLine();
-        }
-
-    }
-
-    void DrawPostProcessingSettings()
-    {
-        // Advanced Settings Foldout
-        showPostProcSettings = EditorGUILayout.Foldout(
-            showPostProcSettings,
-            new GUIContent("Post Processing Settings", "Optional post processing settings")
-        );
-
-
-        if ( showPostProcSettings)
-        {
-            EditorGUI.indentLevel++;
-
-            // Vignette Slider
-            vignetteIntensity = EditorGUILayout.Slider(
-                new GUIContent("Vignette Intensity", "Adjusts the intensity of the vignette effect"),
-                vignetteIntensity, 0.0f, 1f
-            );
-
-            //Noise effect
-            noiseAmount = EditorGUILayout.Slider(
-            new GUIContent("Noise Amount", "Adds random noise to the image"),
-            noiseAmount, 0f, 1f
-            );
-
-            //Enum dropdown for the postprocessing effect
-            selectedEffect = (PostProcessingEffect)EditorGUILayout.EnumPopup(
-            new GUIContent("Post-Processing", "Choose a post-processing effect to apply"),
-            selectedEffect
-            );
-
-            // Shifty Mode Checkbox
-            shiftyMode = EditorGUILayout.Toggle(
-                new GUIContent("Radiation Mode", "Bit of a joke setting, makes it look like you're staring at a bar of Plutonium"),
-                shiftyMode
-            );
-
-            GUILayout.Space(10);
-            EditorGUI.indentLevel--;
-            DrawHorizontalLine();
-        }
-
-    }
-    
+   
     /// <summary>
     /// Displays save location controls (path, choose, open).
     /// </summary>
-    void DisplaySaveLocationControls()
+    internal void DisplaySaveLocationControls()
     {
         GUILayout.BeginHorizontal();
 
@@ -264,7 +95,7 @@ public class ScreenshotTool : EditorWindow
     /// <summary>
     /// Displays input field for custom file tag.
     /// </summary>
-    void DisplayFileTagSetting()
+    internal void DisplayFileTagSetting()
     {
         fileTag = EditorGUILayout.TextField(
             new GUIContent("File Tag", "Tag to be included in the screenshot filename"),
@@ -275,40 +106,30 @@ public class ScreenshotTool : EditorWindow
     /// <summary>
     /// Displays the preview of screenshot dimensions.
     /// </summary>
-    void DisplayPreview()
+    internal void DisplayPreview()
     {
         SceneView sceneView = SceneView.lastActiveSceneView;
-        if (sceneView != null)
-        {
-            var (width, height) = GetScreenshotDimensions(sceneView);
-            GUILayout.Label($"Preview Size: {width} x {height} pixels");
-        }
+        if (sceneView == null) return;
+
+        var (width, height) = GetScreenshotDimensions(sceneView);
+        GUILayout.Label($"Resolution: {width} x {height} pixels");
     }
 
-    /// <summary>
-    /// Draws a horizontal separator line.
-    /// </summary>
-    void DrawHorizontalLine()
-    {
-        GUILayout.Box("", GUILayout.ExpandWidth(true), GUILayout.Height(1));
-    }
 
     /// <summary>
     /// Opens a folder selection dialog to choose save location.
     /// </summary>
-    void ChooseSaveLocation()
+    internal void ChooseSaveLocation()
     {
         string selectedPath = EditorUtility.OpenFolderPanel("Choose Save Folder", folderPath, "");
-        if (!string.IsNullOrEmpty(selectedPath))
-        {
+        if (string.IsNullOrEmpty(selectedPath)) return;
             folderPath = selectedPath;
-        }
     }
 
     /// <summary>
     /// Opens the save location folder in the file explorer.
     /// </summary>
-    void OpenSaveLocation()
+    internal void OpenSaveLocation()
     {
         if (Directory.Exists(folderPath))
         {
@@ -328,7 +149,7 @@ public class ScreenshotTool : EditorWindow
     /// <summary>
     /// Captures a screenshot of the Scene View with the current settings.
     /// </summary>
-    async void TakeEditorScreenshot()
+    internal async void TakeEditorScreenshot()
     {
         await Task.Delay(captureDelay * 1000); // Apply capture delay
 
@@ -356,7 +177,7 @@ public class ScreenshotTool : EditorWindow
     /// <summary>
     /// Generates the full path for the screenshot file.
     /// </summary>
-    string GenerateFilePath()
+    internal string GenerateFilePath()
     {
         string extension = formats[selectedFormat].ToLower();
         string fileName = $"{fileTag}_{System.DateTime.Now:yyyyMMdd_HHmmss}.{extension}";
@@ -398,7 +219,7 @@ public class ScreenshotTool : EditorWindow
         return renderTexture;
     }
 
-    void DisplayLivePreview()
+    internal void DisplayLivePreview()
     {
         SceneView sceneView = SceneView.lastActiveSceneView;
         if (sceneView == null || sceneView.camera == null)
@@ -459,132 +280,6 @@ public class ScreenshotTool : EditorWindow
         DestroyImmediate(tempTexture);
     }
 
-
-    /// <summary>
-    /// Applies a post processing preset effect
-    /// </summary>
-    void ApplyPostProcessingEffect(Texture2D screenshot)
-    {
-        switch (selectedEffect)
-        {
-            case PostProcessingEffect.Grayscale:
-                ApplyGrayscale(screenshot);
-                break;
-
-            case PostProcessingEffect.Sepia:
-                ApplySepia(screenshot);
-                break;
-
-            case PostProcessingEffect.Posterize:
-                ApplyPosterize(screenshot, 15); // Posterize with x levels
-                break;
-
-            case PostProcessingEffect.Inverted:
-                ApplyInvertColors(screenshot);
-                break;
-        }
-
-        screenshot.Apply(); // Apply changes to the texture
-    }
-
-    // Grayscale effect: Averages the RGB values
-    void ApplyGrayscale(Texture2D texture)
-    {
-        Color[] pixels = texture.GetPixels();
-        for (int i = 0; i < pixels.Length; i++)
-        {
-            float gray = (pixels[i].r + pixels[i].g + pixels[i].b) / 3f;
-            pixels[i] = new Color(gray, gray, gray, pixels[i].a);
-        }
-        texture.SetPixels(pixels);
-    }
-
-    // Sepia effect: Applies a brownish tone to the image
-    void ApplySepia(Texture2D texture)
-    {
-        Color[] pixels = texture.GetPixels();
-        for (int i = 0; i < pixels.Length; i++)
-        {
-            Color p = pixels[i];
-            float r = (p.r * 0.393f) + (p.g * 0.769f) + (p.b * 0.189f);
-            float g = (p.r * 0.349f) + (p.g * 0.686f) + (p.b * 0.168f);
-            float b = (p.r * 0.272f) + (p.g * 0.534f) + (p.b * 0.131f);
-            pixels[i] = new Color(Mathf.Clamp01(r), Mathf.Clamp01(g), Mathf.Clamp01(b), p.a);
-        }
-        texture.SetPixels(pixels);
-    }
-
-    // Posterize effect: Reduces the colour levels to create a stylized look
-    void ApplyPosterize(Texture2D texture, int levels)
-    {
-        Color[] pixels = texture.GetPixels();
-        for (int i = 0; i < pixels.Length; i++)
-        {
-            pixels[i].r = Mathf.Floor(pixels[i].r * levels) / levels;
-            pixels[i].g = Mathf.Floor(pixels[i].g * levels) / levels;
-            pixels[i].b = Mathf.Floor(pixels[i].b * levels) / levels;
-        }
-        texture.SetPixels(pixels);
-    }
-
-    //Invert Colors effect: Inverts all colours in the image
-    void ApplyInvertColors(Texture2D texture)
-    {
-        Color[] pixels = texture.GetPixels();
-
-        for (int i = 0; i < pixels.Length; i++)
-        {
-            pixels[i].r = 1.0f - pixels[i].r; // Invert red channel
-            pixels[i].g = 1.0f - pixels[i].g; // Invert green channel
-            pixels[i].b = 1.0f - pixels[i].b; // Invert blue channel
-        }
-
-        texture.SetPixels(pixels);
-        texture.Apply(); // Apply changes to the texture
-    }
-
-    /// <summary>
-    /// Adds a random noise value to all the pixels in the image
-    /// </summary>
-    void ApplyNoise(Texture2D texture, float noiseAmount)
-    {
-        Color[] pixels = texture.GetPixels();
-        for (int i = 0; i < pixels.Length; i++)
-        {
-            float noise = (Random.value * 2 - 1) * noiseAmount; // Random noise between -noiseAmount and +noiseAmount
-
-            // Add noise to each RGB channel, clamping between 0 and 1
-            pixels[i].r = Mathf.Clamp01(pixels[i].r + noise);
-            pixels[i].g = Mathf.Clamp01(pixels[i].g + noise);
-            pixels[i].b = Mathf.Clamp01(pixels[i].b + noise);
-        }
-        texture.SetPixels(pixels);
-        texture.Apply(); // Apply changes to the texture
-    }
-    void ApplyVignetteEffect(Texture2D screenshot)
-    {
-        int width = screenshot.width;
-        int height = screenshot.height;
-        Vector2 center = new Vector2(width / 2f, height / 2f);
-        float maxDistance = Vector2.Distance(Vector2.zero, center); // Max distance for vignette
-
-        Color[] pixels = screenshot.GetPixels();
-
-        for (int y = 0; y < height; y++)
-        {
-            for (int x = 0; x < width; x++)
-            {
-                int index = y * width + x;
-                float distance = Vector2.Distance(new Vector2(x, y), center) / maxDistance;
-                float vignetteFactor = Mathf.Clamp01(1.0f - vignetteIntensity * distance);
-
-                pixels[index] *= vignetteFactor; // Apply vignette by darkening the pixel
-            }
-        }
-
-        screenshot.SetPixels(pixels);
-        screenshot.Apply(); // Apply changes to the texture
-    }
     /// <summary>
     /// Saves the captured screenshot to the specified path.
     /// </summary>
@@ -605,54 +300,59 @@ public class ScreenshotTool : EditorWindow
 
     void AddAllEffects(Texture2D screenshot)
     {
-        ApplyPostProcessingEffect(screenshot); // New Post-Processing
-        if (shiftyMode) ApplyShiftyModeAcrossRows(screenshot); // Apply shifty effect
-        if (noiseAmount > 0) ApplyNoise(screenshot, noiseAmount); // Noise effect
-
-        ApplyVignetteEffect(screenshot); // Apply vignette effect
-
+        ApplyEffect(screenshot, (Effect)selectedEffect); // Use enum from PostProcessingEffects
+        if (shiftyMode) ApplyShiftyModeAcrossRows(screenshot);
+        if (noiseAmount > 0) ApplyNoise(screenshot, noiseAmount);
+        ApplyVignette(screenshot, vignetteIntensity);
         if (watermark != null) ApplyWatermark(screenshot);
-    } 
+    }
 
     /// <summary>
     /// Applies a watermark to the screenshot.
     /// </summary>
     void ApplyWatermark(Texture2D screenshot)
     {
-        //This is techy and I hate it.
-        // Define the max percentage of the screenshot the watermark can take (this stops lower resolutions from being completely overtaken by a watermark)
-        float maxWatermarkWidthPercentage = 0.5f; // % of the screenshot's width
-        float maxWatermarkHeightPercentage = 0.5f; // % of the screenshot's height
+        if (watermark == null)
+        {
+            return;
+        }
 
-        // Calculate the max width and height for the watermark
+        // Check if the watermark texture has read/write enabled
+        try
+        {
+            // Try to access a pixel to test read/write permissions
+            watermark.GetPixel(0, 0);
+        }
+        catch (UnityException)
+        {
+            return;
+        }
+
+        float maxWatermarkWidthPercentage = 0.5f;
+        float maxWatermarkHeightPercentage = 0.5f;
+
         int maxWidth = Mathf.FloorToInt(screenshot.width * maxWatermarkWidthPercentage);
         int maxHeight = Mathf.FloorToInt(screenshot.height * maxWatermarkHeightPercentage);
 
-        // Calculate scaling factors for the watermark
         float widthScale = Mathf.Min(1, maxWidth / (float)watermark.width);
         float heightScale = Mathf.Min(1, maxHeight / (float)watermark.height);
-        float scale = Mathf.Min(widthScale, heightScale); // Use the smaller scale to maintain aspect ratio
+        float scale = Mathf.Min(widthScale, heightScale);
 
-        // Calculate the final size of the watermark
         int finalWidth = Mathf.FloorToInt(watermark.width * scale);
         int finalHeight = Mathf.FloorToInt(watermark.height * scale);
 
-        // Determine the position to place the watermark (bottom-right corner)
         int x = screenshot.width - finalWidth;
-        int y = 0; // You can adjust this if you want it vertically centered or positioned differently
+        int y = 0;
 
-        // Loop through the scaled watermark and apply it to the screenshot
         for (int i = 0; i < finalWidth; i++)
         {
             for (int j = 0; j < finalHeight; j++)
             {
-                // Calculate the corresponding pixel from the original watermark
                 int watermarkX = Mathf.FloorToInt(i / scale);
                 int watermarkY = Mathf.FloorToInt(j / scale);
 
-                // Get the watermark pixel and adjust opacity
                 Color watermarkPixel = watermark.GetPixel(watermarkX, watermarkY);
-                watermarkPixel.a *= 0.5f; // Reduce opacity
+                watermarkPixel.a *= 0.5f;
 
                 if (watermarkPixel.a > 0)
                 {
@@ -663,8 +363,9 @@ public class ScreenshotTool : EditorWindow
             }
         }
 
-        screenshot.Apply(); // Apply the changes to the screenshot
+        screenshot.Apply();
     }
+
 
     void ApplyShiftyModeAcrossRows(Texture2D screenshot)
     {

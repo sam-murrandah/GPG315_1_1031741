@@ -1,5 +1,5 @@
 /*
- Made by Samuel Murrandah
+Made by Samuel Murrandah
 Student Number: 1031741
 Student Email: 1031741@student.sae.edu.au
 Class Code: GPG315
@@ -51,7 +51,7 @@ public class ScreenshotTool : EditorWindow
     private ScreenshotToolUI ui;
     #endregion
 
-
+    #region Core Functions
     void OnGUI()
     {
         scrollPosition = ui.DrawScrollView(scrollPosition, position.width, position.height);
@@ -78,6 +78,7 @@ public class ScreenshotTool : EditorWindow
     {
         ui = new ScreenshotToolUI(this);
     }
+    #endregion
 
     #region Display
 

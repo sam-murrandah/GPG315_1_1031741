@@ -15,6 +15,7 @@ using static PostProcessingEffects;
 
 public class ScreenshotTool : EditorWindow
 {
+    #region Variables and Settings
     // Basic Settings
     public string folderPath = Path.Combine(Application.dataPath, "Screenshots");
     public string[] formats = { "PNG", "JPEG", "EXR" };
@@ -29,6 +30,7 @@ public class ScreenshotTool : EditorWindow
     public float vignetteIntensity = 0f;
     public float noiseAmount = 0f;
     public Effect selectedEffect = Effect.None;
+    public ColourblindMode colorblindMode = ColourblindMode.Normal;
 
     // UI State
     private RenderTexture previewTexture;
@@ -40,19 +42,8 @@ public class ScreenshotTool : EditorWindow
 
     // UI Management
     private ScreenshotToolUI ui;
+    #endregion
 
-
-    [MenuItem("Tools/Quick Screenshot Tool")]
-    public static void ShowWindow()
-    {
-        var window = GetWindow<ScreenshotTool>("Screenshot Tool");
-        window.minSize = new Vector2(400, 300);
-    }
-
-    private void OnEnable()
-    {
-        ui = new ScreenshotToolUI(this);
-    }
 
     void OnGUI()
     {
@@ -69,44 +60,52 @@ public class ScreenshotTool : EditorWindow
         EditorGUILayout.EndScrollView();
     }
    
+    [MenuItem("Tools/Quick Screenshot Tool")]
+    public static void ShowWindow()
+    {
+        var window = GetWindow<ScreenshotTool>("Screenshot Tool");
+        window.minSize = new Vector2(400, 300);
+    }
+
+    private void OnEnable()
+    {
+        ui = new ScreenshotToolUI(this);
+    }
+
+    #region Display
+
+    // ----- UI Element Functions -----
+
     /// <summary>
-    /// Displays save location controls (path, choose, open).
+    /// Displays the controls for the save location (path, choose, open).
     /// </summary>
     internal void DisplaySaveLocationControls()
     {
         GUILayout.BeginHorizontal();
 
-            GUILayout.Label(new GUIContent("Save Location", "Path where screenshots will be saved"), GUILayout.Width(100));
-            EditorGUILayout.SelectableLabel(folderPath, EditorStyles.textField, GUILayout.Height(18));
+        GUILayout.Label(new GUIContent("Save Location", "Path where screenshots will be saved"), GUILayout.Width(100));
+        EditorGUILayout.SelectableLabel(folderPath, EditorStyles.textField, GUILayout.Height(18));
 
-            if (GUILayout.Button(new GUIContent("Choose", "Select a folder to save screenshots"), GUILayout.Width(60)))
-            {
-                ChooseSaveLocation();
-            }
+        if (GUILayout.Button(new GUIContent("Choose", "Select a folder to save screenshots"), GUILayout.Width(60)))
+        {
+            ChooseSaveLocation();
+        }
 
-            if (GUILayout.Button(new GUIContent("Open", "Open the folder where screenshots are saved"), GUILayout.Width(60)))
-            {
-                OpenSaveLocation();
-            }
+        if (GUILayout.Button(new GUIContent("Open", "Open the folder where screenshots are saved"), GUILayout.Width(60)))
+        {
+            OpenSaveLocation();
+        }
 
         GUILayout.EndHorizontal();
-    }
 
-    /// <summary>
-    /// Displays input field for custom file tag.
-    /// </summary>
-    internal void DisplayFileTagSetting()
-    {
         fileTag = EditorGUILayout.TextField(
-            new GUIContent("File Tag", "Tag to be included in the screenshot filename"),
-            fileTag
-        );
+            new GUIContent("File Tag", "Tag to be included in the screenshot filename"), fileTag);
     }
 
     /// <summary>
     /// Displays the preview of screenshot dimensions.
     /// </summary>
-    internal void DisplayPreview()
+    internal void DisplayPreviewResolution()
     {
         SceneView sceneView = SceneView.lastActiveSceneView;
         if (sceneView == null) return;
@@ -115,15 +114,16 @@ public class ScreenshotTool : EditorWindow
         GUILayout.Label($"Resolution: {width} x {height} pixels");
     }
 
+    // ----- File Management Functions -----
 
     /// <summary>
-    /// Opens a folder selection dialog to choose save location.
+    /// Opens a folder selection dialog to choose the save location.
     /// </summary>
     internal void ChooseSaveLocation()
     {
         string selectedPath = EditorUtility.OpenFolderPanel("Choose Save Folder", folderPath, "");
         if (string.IsNullOrEmpty(selectedPath)) return;
-            folderPath = selectedPath;
+        folderPath = selectedPath;
     }
 
     /// <summary>
@@ -146,6 +146,23 @@ public class ScreenshotTool : EditorWindow
         }
     }
 
+
+    /// <summary>
+    /// Generates the full path for the screenshot file.
+    /// </summary>
+    internal string GenerateFilePath()
+    {
+        string extension = formats[selectedFormat].ToLower();
+        string fileName = $"{fileTag}_{System.DateTime.Now:yyyyMMdd_HHmmss}.{extension}";
+        return Path.Combine(folderPath, fileName);
+    }
+
+    #endregion
+
+    #region Screenshot Handling
+
+    // ----- Core Screenshot Functionality -----
+
     /// <summary>
     /// Captures a screenshot of the Scene View with the current settings.
     /// </summary>
@@ -164,25 +181,41 @@ public class ScreenshotTool : EditorWindow
         if (sceneView == null) return;
 
         var (width, height) = GetScreenshotDimensions(sceneView);
-        RenderTexture renderTexture = CaptureScene(sceneView, width, height);
+        RenderTexture renderTexture = CaptureScene(sceneView, width, height); //Get the screenshot data from the scene view
 
         SaveScreenshot(renderTexture, fullPath); // Save the screenshot
         CleanupAfterCapture(sceneView, renderTexture); // Clean up resources
 
-        this.ShowNotification(new GUIContent("Screenshot saved!"));
+        this.ShowNotification(new GUIContent("Screenshot saved!")); //yippee
         UnityEngine.Debug.Log($"Screenshot saved: {fullPath}");
-        AssetDatabase.Refresh(); // Refresh AssetDatabase to reflect changes
+        AssetDatabase.Refresh(); // Refresh AssetDatabase to reflect changes in Unity
     }
 
     /// <summary>
-    /// Generates the full path for the screenshot file.
+    /// Saves the captured screenshot to the specified path.
     /// </summary>
-    internal string GenerateFilePath()
+    void SaveScreenshot(RenderTexture renderTexture, string fullPath)
     {
-        string extension = formats[selectedFormat].ToLower();
-        string fileName = $"{fileTag}_{System.DateTime.Now:yyyyMMdd_HHmmss}.{extension}";
-        return Path.Combine(folderPath, fileName);
+        //Get the screenshot data
+        RenderTexture.active = renderTexture;
+        Texture2D screenshot = new Texture2D(renderTexture.width, renderTexture.height, TextureFormat.RGB24, false);
+        screenshot.ReadPixels(new Rect(0, 0, renderTexture.width, renderTexture.height), 0, 0);
+        screenshot.Apply();
+
+        //Apply all the effects (post processing, colorblindness etc)
+        AddAllEffects(screenshot);
+
+        byte[] bytes = selectedFormat switch
+        {
+            0 => screenshot.EncodeToPNG(),
+            1 => screenshot.EncodeToJPG(),
+            _ => screenshot.EncodeToEXR()
+        };
+
+        File.WriteAllBytes(fullPath, bytes);
     }
+
+    // ----- Scene View and Capture Utility Functions -----
 
     /// <summary>
     /// Retrieves the active Scene View.
@@ -209,7 +242,7 @@ public class ScreenshotTool : EditorWindow
     }
 
     /// <summary>
-    /// Captures the Scene View to a RenderTexture. (Basically screenshotting)
+    /// Captures the Scene View to a RenderTexture.
     /// </summary>
     RenderTexture CaptureScene(SceneView sceneView, int width, int height)
     {
@@ -218,6 +251,8 @@ public class ScreenshotTool : EditorWindow
         sceneView.camera.Render();
         return renderTexture;
     }
+
+    // ----- Live Preview Logic -----
 
     internal void DisplayLivePreview()
     {
@@ -228,19 +263,13 @@ public class ScreenshotTool : EditorWindow
             return;
         }
 
-        // Get the dimensions of the Scene View
         var (sceneWidth, sceneHeight) = GetScreenshotDimensions(sceneView);
-
-        // Calculate the aspect ratio
         float aspectRatio = (float)sceneWidth / sceneHeight;
 
-        // Get the available width and height in the editor window
-        float availableWidth = position.width - 20;  // Subtracting some padding
-        float availableHeight = position.height - 100; // Accounting for layout elements
+        float availableWidth = position.width - 20;  // Subtracting padding
+        float availableHeight = position.height - 100; // Layout adjustments
 
-        // Adjust the preview size to fit within available space while maintaining aspect ratio
         float previewWidth, previewHeight;
-
         if (availableWidth / aspectRatio <= availableHeight)
         {
             previewWidth = availableWidth;
@@ -252,59 +281,42 @@ public class ScreenshotTool : EditorWindow
             previewWidth = availableHeight * aspectRatio;
         }
 
-        // Create or reuse the preview RenderTexture
-        if (previewTexture == null || previewTexture.width != (int)previewWidth || previewTexture.height != (int)previewHeight)
+        if (previewTexture == null ||
+            previewTexture.width != (int)previewWidth ||
+            previewTexture.height != (int)previewHeight)
         {
-            if (previewTexture != null) previewTexture.Release(); // Release previous texture
+            if (previewTexture != null) previewTexture.Release();
             previewTexture = new RenderTexture((int)previewWidth, (int)previewHeight, 24);
         }
 
-        // Set the camera to render to the preview texture
         sceneView.camera.targetTexture = previewTexture;
         sceneView.camera.Render();
         sceneView.camera.targetTexture = null;
 
-        // Read the RenderTexture into a Texture2D
         RenderTexture.active = previewTexture;
         Texture2D tempTexture = new Texture2D((int)previewWidth, (int)previewHeight, TextureFormat.RGB24, false);
         tempTexture.ReadPixels(new Rect(0, 0, previewWidth, previewHeight), 0, 0);
         tempTexture.Apply();
-        RenderTexture.active = null; // Unbind the RenderTexture
+        RenderTexture.active = null;
 
         AddAllEffects(tempTexture);
 
-        // Display the preview texture in the editor window
         GUILayout.Label(new GUIContent(tempTexture), GUILayout.Width(previewWidth), GUILayout.Height(previewHeight));
-
-        // Clean up the temporary texture
         DestroyImmediate(tempTexture);
     }
 
-    /// <summary>
-    /// Saves the captured screenshot to the specified path.
-    /// </summary>
-    void SaveScreenshot(RenderTexture renderTexture, string fullPath)
-    {
-        RenderTexture.active = renderTexture;
-        Texture2D screenshot = new Texture2D(renderTexture.width, renderTexture.height, TextureFormat.RGB24, false);
-        screenshot.ReadPixels(new Rect(0, 0, renderTexture.width, renderTexture.height), 0, 0);
-        screenshot.Apply();
+    #endregion
 
-        AddAllEffects(screenshot);
-        byte[] bytes = selectedFormat == 0 ? screenshot.EncodeToPNG() :
-                       selectedFormat == 1 ? screenshot.EncodeToJPG() :
-                       screenshot.EncodeToEXR();
-
-        File.WriteAllBytes(fullPath, bytes);
-    }
-
+    #region PostProcessing
     void AddAllEffects(Texture2D screenshot)
     {
         ApplyEffect(screenshot, (Effect)selectedEffect); // Use enum from PostProcessingEffects
-        if (shiftyMode) ApplyShiftyModeAcrossRows(screenshot);
+        if (shiftyMode) ApplyRadiationMode(screenshot);
         if (noiseAmount > 0) ApplyNoise(screenshot, noiseAmount);
         ApplyVignette(screenshot, vignetteIntensity);
+        if (colorblindMode != ColourblindMode.Normal) ApplyColourblindFilter(screenshot, colorblindMode);
         if (watermark != null) ApplyWatermark(screenshot);
+
     }
 
     /// <summary>
@@ -328,6 +340,7 @@ public class ScreenshotTool : EditorWindow
             return;
         }
 
+        //Set this to max size in relation to the screenshot (Stops it from overwhelming the image on lower resolutions
         float maxWatermarkWidthPercentage = 0.5f;
         float maxWatermarkHeightPercentage = 0.5f;
 
@@ -354,6 +367,7 @@ public class ScreenshotTool : EditorWindow
                 Color watermarkPixel = watermark.GetPixel(watermarkX, watermarkY);
                 watermarkPixel.a *= 0.5f;
 
+                //Techy pixel combination technique
                 if (watermarkPixel.a > 0)
                 {
                     Color screenshotPixel = screenshot.GetPixel(x + i, y + j);
@@ -367,7 +381,7 @@ public class ScreenshotTool : EditorWindow
     }
 
 
-    void ApplyShiftyModeAcrossRows(Texture2D screenshot)
+    void ApplyRadiationMode(Texture2D screenshot)
     {
         int width = screenshot.width;
         int height = screenshot.height;
@@ -423,7 +437,9 @@ public class ScreenshotTool : EditorWindow
         screenshot.SetPixels(glitchPixels);
         screenshot.Apply(); // Apply the changes
     }
+    #endregion
 
+    #region Resource Management
     /// <summary>
     /// Cleans up resources after capturing. (Good for memory leaks and just overall cleanliness)
     /// </summary>
@@ -433,4 +449,5 @@ public class ScreenshotTool : EditorWindow
         RenderTexture.active = null;
         DestroyImmediate(renderTexture);
     }
+    #endregion
 }

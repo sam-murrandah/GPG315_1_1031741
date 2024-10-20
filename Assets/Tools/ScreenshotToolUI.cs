@@ -1,3 +1,11 @@
+/*
+ Made by Samuel Murrandah
+Student Number: 1031741
+Student Email: 1031741@student.sae.edu.au
+Class Code: GPG315
+Assignment: 1
+*/
+
 using UnityEditor;
 using UnityEngine;
 using static PostProcessingEffects;
@@ -5,28 +13,11 @@ using static PostProcessingEffects;
 public class ScreenshotToolUI
 {
     private ScreenshotTool screenshotTool;
-
     public ScreenshotToolUI(ScreenshotTool tool)
     {
         screenshotTool = tool;
     }
-
-    public Vector2 DrawScrollView(Vector2 scrollPosition, float windowWidth, float windowHeight)
-    {
-        return EditorGUILayout.BeginScrollView(
-            scrollPosition,
-            GUILayout.Width(windowWidth),
-            GUILayout.Height(windowHeight)
-        );
-    }
-
-    public void DrawHeader(string title)
-    {
-        GUILayout.Label(new GUIContent(title, "A tool for taking screenshots of the Scene View"), EditorStyles.boldLabel);
-        GUILayout.Space(10);
-        DrawHorizontalLine();
-    }
-
+    #region Draw Settings
     public void DrawSaveSettings(ref bool showSaveSettings)
     {
         showSaveSettings = EditorGUILayout.Foldout(showSaveSettings, new GUIContent("Save Settings", "Settings for saving screenshots"));
@@ -35,7 +26,6 @@ public class ScreenshotToolUI
         {
             EditorGUI.indentLevel++;
             screenshotTool.DisplaySaveLocationControls();
-            screenshotTool.DisplayFileTagSetting();
             EditorGUI.indentLevel--;
             DrawHorizontalLine();
         }
@@ -62,7 +52,7 @@ public class ScreenshotToolUI
             );
 
             GUILayout.Label(new GUIContent("Preview", "Preview the dimensions of the screenshot"), EditorStyles.boldLabel);
-            screenshotTool.DisplayPreview();
+            screenshotTool.DisplayPreviewResolution();
             
             EditorGUI.indentLevel--;
             DrawHorizontalLine();
@@ -86,11 +76,19 @@ public class ScreenshotToolUI
                 screenshotTool.captureDelay, 0, 10
             );
 
+            //Colourblind settings
+            screenshotTool.colorblindMode = (ColourblindMode)EditorGUILayout.EnumPopup(
+                new GUIContent("Colourblind Mode", "Choose a colorblind filter to apply"),
+                screenshotTool.colorblindMode
+            );
+
             // Watermark field with read/write validation
             screenshotTool.watermark = (Texture2D)EditorGUILayout.ObjectField(
                 new GUIContent("Watermark", "Optional watermark to overlay on the screenshot"),
                 screenshotTool.watermark, typeof(Texture2D), false
             );
+
+
 
             if (screenshotTool.watermark != null)
             {
@@ -113,21 +111,6 @@ public class ScreenshotToolUI
 
         GUILayout.Space(10);
     }
-
-    // Helper method to check if the texture is readable
-    private bool IsTextureReadable(Texture2D texture)
-    {
-        try
-        {
-            texture.GetPixel(0, 0); // Test read access
-            return true;
-        }
-        catch (UnityException)
-        {
-            return false;
-        }
-    }
-
 
     public void DrawPostProcessingSettings(ref bool showPostProcSettings)
     {
@@ -164,6 +147,24 @@ public class ScreenshotToolUI
         GUILayout.Space(10);
     }
 
+    #endregion
+
+    #region Draw Misc
+    public Vector2 DrawScrollView(Vector2 scrollPosition, float windowWidth, float windowHeight)
+    {
+        return EditorGUILayout.BeginScrollView(
+            scrollPosition,
+            GUILayout.Width(windowWidth),
+            GUILayout.Height(windowHeight)
+        );
+    }
+
+    public void DrawHeader(string title)
+    {
+        GUILayout.Label(new GUIContent(title, "A tool for taking screenshots of the Scene View"), EditorStyles.boldLabel);
+        GUILayout.Space(10);
+        DrawHorizontalLine();
+    }
     public void DrawTakeScreenshotButton(SceneView sceneView)
     {
         EditorGUI.BeginDisabledGroup(sceneView == null);
@@ -184,8 +185,24 @@ public class ScreenshotToolUI
         GUILayout.Space(10);
     }
 
+
     private void DrawHorizontalLine()
     {
         GUILayout.Box("", GUILayout.ExpandWidth(true), GUILayout.Height(1));
+    }
+    #endregion
+
+    // Helper method to check if the texture is readable
+    private bool IsTextureReadable(Texture2D texture)
+    {
+        try
+        {
+            texture.GetPixel(0, 0); // Test read access
+            return true;
+        }
+        catch (UnityException)
+        {
+            return false;
+        }
     }
 }

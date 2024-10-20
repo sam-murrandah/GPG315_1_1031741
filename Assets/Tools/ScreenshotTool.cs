@@ -4,6 +4,10 @@ Student Number: 1031741
 Student Email: 1031741@student.sae.edu.au
 Class Code: GPG315
 Assignment: 1
+
+AI Declaration:
+Generative AI was used for editing and organisation such as reordering functions as well as some comments.
+All code and logic was created and written by me
 */
 
 using UnityEditor;
@@ -24,13 +28,16 @@ public class ScreenshotTool : EditorWindow
     public string fileTag = "Screenshot";
     public int captureDelay = 0;
     public Texture2D watermark;
+    public bool flashEnabled = true;  // Flash toggle setting
+    public bool livePreviewEnabled;
+
 
     // Post-Processing Settings
-    public bool shiftyMode = false;
+    public bool radiationMode = false;
     public float vignetteIntensity = 0f;
     public float noiseAmount = 0f;
     public Effect selectedEffect = Effect.None;
-    public ColourblindMode colorblindMode = ColourblindMode.Normal;
+    public ColourblindMode colourblindMode = ColourblindMode.Normal;
 
     // UI State
     private RenderTexture previewTexture;
@@ -170,6 +177,7 @@ public class ScreenshotTool : EditorWindow
     {
         await Task.Delay(captureDelay * 1000); // Apply capture delay
 
+        FlashSceneView();  // Flash the Scene View
         string fullPath = GenerateFilePath(); // Generate file path
 
         if (!Directory.Exists(folderPath))
@@ -185,7 +193,6 @@ public class ScreenshotTool : EditorWindow
 
         SaveScreenshot(renderTexture, fullPath); // Save the screenshot
         CleanupAfterCapture(sceneView, renderTexture); // Clean up resources
-
         this.ShowNotification(new GUIContent("Screenshot saved!")); //yippee
         UnityEngine.Debug.Log($"Screenshot saved: {fullPath}");
         AssetDatabase.Refresh(); // Refresh AssetDatabase to reflect changes in Unity
@@ -256,6 +263,7 @@ public class ScreenshotTool : EditorWindow
 
     internal void DisplayLivePreview()
     {
+        if (!livePreviewEnabled) return;  // Skip if live preview is disabled
         SceneView sceneView = SceneView.lastActiveSceneView;
         if (sceneView == null || sceneView.camera == null)
         {
@@ -311,10 +319,10 @@ public class ScreenshotTool : EditorWindow
     void AddAllEffects(Texture2D screenshot)
     {
         ApplyEffect(screenshot, (Effect)selectedEffect); // Use enum from PostProcessingEffects
-        if (shiftyMode) ApplyRadiationMode(screenshot);
+        if (radiationMode) ApplyRadiationMode(screenshot);
         if (noiseAmount > 0) ApplyNoise(screenshot, noiseAmount);
         ApplyVignette(screenshot, vignetteIntensity);
-        if (colorblindMode != ColourblindMode.Normal) ApplyColourblindFilter(screenshot, colorblindMode);
+        if (colourblindMode != ColourblindMode.Normal) ApplyColourblindFilter(screenshot, colourblindMode);
         if (watermark != null) ApplyWatermark(screenshot);
 
     }
@@ -448,6 +456,45 @@ public class ScreenshotTool : EditorWindow
         sceneView.camera.targetTexture = null;
         RenderTexture.active = null;
         DestroyImmediate(renderTexture);
+    }
+    #endregion
+
+    #region Quirky Features
+    internal async void FlashSceneView()
+    {
+        if (!flashEnabled) return;  // Exit if flash is disabled
+        var sceneView = SceneView.lastActiveSceneView;
+        if (sceneView == null) return;
+
+        float alpha = 1f;  // Start fully opaque
+
+        // Register a callback to draw the white overlay with fading alpha
+        void DrawFadingOverlay(SceneView sv)
+        {
+            Handles.BeginGUI();
+            GUI.color = new Color(1, 1, 1, alpha); // White with fading alpha
+            GUI.DrawTexture(new Rect(0, 0, sv.position.width, sv.position.height), Texture2D.whiteTexture);
+            Handles.EndGUI();
+        }
+
+        SceneView.duringSceneGui += DrawFadingOverlay;
+        sceneView.Repaint();
+
+        // Gradually reduce alpha
+        float duration = 3f;
+        float elapsedTime = 0f;
+
+        while (elapsedTime < duration)
+        {
+            elapsedTime += Time.deltaTime;
+            alpha = Mathf.Lerp(1f, 0f, elapsedTime / duration);  // Lerp from 1 to 0
+            sceneView.Repaint();  // Repaint to show the updated alpha
+            await Task.Yield();  // Wait for the next frame
+        }
+
+        // Cleanup after fading is complete
+        SceneView.duringSceneGui -= DrawFadingOverlay;
+        sceneView.Repaint();
     }
     #endregion
 }

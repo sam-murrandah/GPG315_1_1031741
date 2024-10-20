@@ -76,19 +76,25 @@ public class ScreenshotToolUI
                 screenshotTool.captureDelay, 0, 10
             );
 
-            //Colourblind settings
-            screenshotTool.colorblindMode = (ColourblindMode)EditorGUILayout.EnumPopup(
-                new GUIContent("Colourblind Mode", "Choose a colorblind filter to apply"),
-                screenshotTool.colorblindMode
+            screenshotTool.flashEnabled = EditorGUILayout.Toggle(
+                new GUIContent("Enable Flash", "Toggle the flash effect when a screenshot is taken"),
+                screenshotTool.flashEnabled
             );
 
-            // Watermark field with read/write validation
+            screenshotTool.livePreviewEnabled = EditorGUILayout.Toggle(
+                new GUIContent("Enable Live Preview", "Toggle the live preview window to improve performance"),
+                screenshotTool.livePreviewEnabled
+            );
+
+            screenshotTool.colourblindMode = (ColourblindMode)EditorGUILayout.EnumPopup(
+                new GUIContent("Colourblind Mode", "Choose a colorblind filter to apply"),
+                screenshotTool.colourblindMode
+            );
+
             screenshotTool.watermark = (Texture2D)EditorGUILayout.ObjectField(
                 new GUIContent("Watermark", "Optional watermark to overlay on the screenshot"),
                 screenshotTool.watermark, typeof(Texture2D), false
             );
-
-
 
             if (screenshotTool.watermark != null)
             {
@@ -111,6 +117,8 @@ public class ScreenshotToolUI
 
         GUILayout.Space(10);
     }
+
+
 
     public void DrawPostProcessingSettings(ref bool showPostProcSettings)
     {
@@ -135,9 +143,9 @@ public class ScreenshotToolUI
                 screenshotTool.selectedEffect
             );
 
-            screenshotTool.shiftyMode = EditorGUILayout.Toggle(
+            screenshotTool.radiationMode = EditorGUILayout.Toggle(
                 new GUIContent("Radiation Mode", "Bit of a joke setting, makes it look like you're staring at a bar of Plutonium"),
-                screenshotTool.shiftyMode
+                screenshotTool.radiationMode
             );
 
             EditorGUI.indentLevel--;
